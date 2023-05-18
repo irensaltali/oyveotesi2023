@@ -1,0 +1,18 @@
+[
+    {
+        "ballot_box_number": 1004,
+        "cm_result": {
+            "image_url": "https://secim-images.oyveotesi.org/oyveotesi/raw/server/1881_bulk_999999999_1684093285372859090.jpg",
+            "submission_id": 467999,
+            "total_vote": 143,
+            "votes": {
+                "1": 72,
+                "2": 1,
+                "3": 66,
+                "4": 4
+            }
+        },
+        "mv_result": null,
+        "school_name": "A\u011eA\u00c7PINAR-K\u00d6Y H\u0130ZMETLER\u0130 SALONU"
+    }
+]

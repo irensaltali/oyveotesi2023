@@ -1,0 +1,59 @@
+[
+    {
+        "ballot_box_number": 1047,
+        "cm_result": {
+            "image_url": "https://source3-secim-images.oyveotesi.org/raw/bulk_download/v2/70cea726-2e96-4628-9090-c9ac7e31f8cc-1684106466294645926.jpg",
+            "submission_id": 792408,
+            "total_vote": 240,
+            "votes": {
+                "1": 116,
+                "2": 1,
+                "3": 96,
+                "4": 27
+            }
+        },
+        "mv_result": {
+            "image_url": "https://source3-secim-images.oyveotesi.org/raw/bulk_download/v2/a46dd9fa-6b55-4f4f-9956-c840fc4ac8d1-1684106463102135198.jpg",
+            "submission_id": 791912,
+            "total_vote": 236,
+            "votes": {
+                "1": 0,
+                "10": 3,
+                "11": 39,
+                "12": 0,
+                "13": 6,
+                "14": 0,
+                "17": 0,
+                "19": 2,
+                "2": 0,
+                "21": 50,
+                "22": 35,
+                "24": 11,
+                "3": 0,
+                "4": 0,
+                "5": 1,
+                "6": 2,
+                "7": 3,
+                "8": 2,
+                "9": 82
+            }
+        },
+        "school_name": "\u015eEH\u0130T ADEM O\u011eUZ YATILI B\u00d6LGE ORTAOKULU"
+    },
+    {
+        "ballot_box_number": 1046,
+        "cm_result": {
+            "image_url": "https://source3-secim-images.oyveotesi.org/raw/bulk_download/v2/12078236-3977-42b8-8b2f-d3e27d93af8b-1684106475433846110.jpg",
+            "submission_id": 793788,
+            "total_vote": 246,
+            "votes": {
+                "1": 125,
+                "2": 4,
+                "3": 96,
+                "4": 21
+            }
+        },
+        "mv_result": null,
+        "school_name": "\u015eEH\u0130T ADEM O\u011eUZ YATILI B\u00d6LGE ORTAOKULU"
+    }
+]
