@@ -4,12 +4,13 @@ import requests
 import boto3
 import time
 import re
-import cv2
+from google.cloud import vision
+from google.oauth2 import service_account
 
 # Configure AWS credentials and region for Textract
 AWS_REGION = 'eu-central-1'
 S3_BUCKET = 'xx'
-
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = './credentials.json'
 
 def get_rows_columns_map(table_result, blocks_map):
     rows = {}
@@ -125,37 +126,6 @@ def textract_to_csv(response):
 
     return csv
 
-
-def preprocess_image(image, min_area_threshold=2000, concentration_threshold=0.8):
-    # Convert the image to grayscale
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Pixel concentration analysis
-    _, threshold_image = cv2.threshold(gray_image, 200, 255, cv2.THRESH_BINARY)
-
-    # Collapse the pixels horizontally and calculate concentration
-    black_pixels_concentration = cv2.reduce(threshold_image, 1, cv2.REDUCE_SUM, dtype=cv2.CV_32F) / (255 * threshold_image.shape[1])
-
-    # Find non-text segments
-    non_text_segments = []
-    row, col = 0, 0
-    while col < black_pixels_concentration.shape[1]:
-        if black_pixels_concentration[row, col] < concentration_threshold:
-            x_min, y_min = col, row
-            while col < black_pixels_concentration.shape[1] and black_pixels_concentration[row, col] < concentration_threshold:
-                col += 1
-            x_max, y_max = col - 1, gray_image.shape[0] - 1
-            non_text_segments.append([x_min, y_min, x_max, y_max])
-        col += 1
-
-    # Remove non-text areas
-    for segment in non_text_segments:
-        x_min, y_min, x_max, y_max = segment
-        cv2.rectangle(gray_image, (x_min, y_min), (x_max, y_max), (255, 255, 255), -1)
-
-    return gray_image
-
-
 def main():
     # Create directories for images and Textract data
     os.makedirs('images', exist_ok=True)
@@ -172,7 +142,6 @@ def main():
     # Iterate over each ballot box data file
     for filename in os.listdir('ballot_boxes_in_school'):
         print(f'Processing {filename}...')
-        ballot_boxes_in_school_id = os.path.splitext(filename)[0]
         file_path = f'ballot_boxes_in_school/{filename}'
 
         with open(file_path) as file:
@@ -181,6 +150,7 @@ def main():
         for ballot_box in ballot_boxes_in_school_data:
             cm_result = ballot_box.get('cm_result')
             ballot_box_number = ballot_box.get('ballot_box_number')
+            print(f'Processing ballot box {ballot_box_number}...')
 
             # Skip if cm_result is None
             if cm_result is None:
@@ -199,9 +169,7 @@ def main():
                 # Check if image already exists in local folder before uploading
                 local_image_path = os.path.join(
                     '.', f'images/{ballot_box_number}/cm.jpg')
-                preprocessed_image_path = os.path.join(
-                    '.', f'images/{ballot_box_number}/cm_preprocessed.jpg')
-                if not os.path.exists(local_image_path) or not os.path.exists(preprocessed_image_path):
+                if not os.path.exists(local_image_path):
                     # Image doesn't exist in local folder, proceed with download and save
                     response = requests.get(image_url)
                     if response.status_code == 200:
@@ -209,12 +177,6 @@ def main():
                         with open(local_image_path, 'wb') as image_file:
                             image_file.write(response.content)
                         # print(f'Saved image for ballot box {ballot_box_number} in local folder')
-                        # Read the downloaded image
-                        image = cv2.imread(local_image_path)
-                        # Preprocess the image
-                        preprocessed_image = preprocess_image(image)# Save the preprocessed image
-                        os.makedirs(os.path.dirname(preprocessed_image_path), exist_ok=True)
-                        cv2.imwrite(preprocessed_image_path, preprocessed_image)
                     else:
                         # print(f'Error downloading image for ballot box {ballot_box_number}')
                         continue
@@ -229,7 +191,7 @@ def main():
                     response = json.load(textract_file)
             else:
                 # Call AWS Textract to process the image
-                with open(preprocessed_image_path, 'rb') as image_file:
+                with open(local_image_path, 'rb') as image_file:
                     image_data = image_file.read()
 
                 response = textract_client.analyze_document(
@@ -245,7 +207,7 @@ def main():
 
             csv = textract_to_csv(response)
 
-            textract_table_path = f'textract/{ballot_boxes_in_school_id}/textract_table_cm.csv'
+            textract_table_path = f'textract/{ballot_box_number}/textract_table_cm.csv'
             with open(textract_table_path, 'w') as textract_table_file:
                 textract_table_file.write(csv)
 
@@ -257,12 +219,36 @@ def main():
             if total_votes == textract_results["TOPLAM"]:
                 print("All candidates' vote count and the total are the same.")
             else:
-                print(
-                    "#################All candidates' vote count and the total are not the same.")
+                print("#################All candidates' vote count and the total are not the same.")
+                vision_client = vision.ImageAnnotatorClient()
+                
+                with open(local_image_path, 'rb') as image_file:
+                    image_data = image_file.read()
+                image = vision.Image(content=image_data)
+                vision_data_path = f'textract/{ballot_box_number}/vision_data_cm.json'
+                vision_response = vision_client.document_text_detection(image=image)
+                vision_document = vision_response.full_text_annotation
+                
+                # os.makedirs(os.path.dirname(vision_data_path), exist_ok=True)
+                # with open(vision_data_path, 'w') as vision_file:
+                #     json.dump(vision_document, vision_file)
+
+                # Process and extract table data
+                table_data = []
+                for page in vision_document.pages:
+                    for block in page.blocks:
+                        for paragraph in block.paragraphs:
+                            print(paragraph)
+                            row_data = []
+                            for word in paragraph.words:
+                                word_text = ''.join([symbol.text for symbol in word.symbols])
+                                row_data.append(word_text)
+                            table_data.append(row_data)
+                print(table_data)
                 # Move the Textract data and image to not_same folder
-                not_same_textract_path = f'not_same/{ballot_boxes_in_school_id}/textract_data_cm.json'
-                not_same_textract_table_path = f'not_same/{ballot_boxes_in_school_id}/textract_data_table_cm.csv'
-                not_same_image_path = f'not_same/{ballot_boxes_in_school_id}/cm.jpg'
+                not_same_textract_path = f'not_same/{ballot_box_number}/textract_data_cm.json'
+                not_same_textract_table_path = f'not_same/{ballot_box_number}/textract_data_table_cm.csv'
+                not_same_image_path = f'not_same/{ballot_box_number}/cm.jpg'
                 os.makedirs(os.path.dirname(
                     not_same_textract_path), exist_ok=True)
                 os.makedirs(os.path.dirname(
@@ -274,7 +260,7 @@ def main():
                 os.rename(textract_table_path, not_same_textract_table_path)
                 os.rename(local_image_path, not_same_image_path)
 
-            # print(f'Saved AWS Textract data for ballot box {ballot_boxes_in_school_id}')
+            # print(f'Saved AWS Textract data for ballot box {ballot_box_number}')
 
             print('\n\n\n')
 
