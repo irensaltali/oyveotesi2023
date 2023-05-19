@@ -8,6 +8,7 @@ import re
 AWS_REGION = 'eu-central-1'
 S3_BUCKET = 'xx'
 
+
 def get_rows_columns_map(table_result, blocks_map):
     rows = {}
     for relationship in table_result['Relationships']:
@@ -20,10 +21,11 @@ def get_rows_columns_map(table_result, blocks_map):
                     if row_index not in rows:
                         # create new row
                         rows[row_index] = {}
-                        
+
                     # get the text value
                     rows[row_index][col_index] = get_text(cell, blocks_map)
     return rows
+
 
 def get_text(result, blocks_map):
     text = ''
@@ -35,92 +37,59 @@ def get_text(result, blocks_map):
                     if word['BlockType'] == 'WORD':
                         text += word['Text'] + ' '
                     if word['BlockType'] == 'SELECTION_ELEMENT':
-                        if word['SelectionStatus'] =='SELECTED':
-                            text +=  'X '    
+                        if word['SelectionStatus'] == 'SELECTED':
+                            text += 'X '
     return text
+
 
 def generate_table_csv(table_result, blocks_map, table_index):
     rows = get_rows_columns_map(table_result, blocks_map)
 
     table_id = 'Table_' + str(table_index)
-    
+
     # get cells.
     csv = 'Table: {0}\n\n'.format(table_id)
 
     for row_index, cols in rows.items():
-        
+
         for col_index, text in cols.items():
             csv += '{}'.format(text) + ","
         csv += '\n'
-        
+
     csv += '\n\n\n'
     return csv
 
-def get_vote_count(data):
+
+def get_vote_count_from_textract(data):
     # Define the candidate names to extract vote counts for
-    candidates = ["RECEP TAYYIP ERDOGAN", "MUHARREM INCE", "KEMAL KILICDAROGLU", "SINAN OGAN"]
+    candidates = {
+        "RECEP TAYYIP ERDOGAN": ["RECEP TAYYIP ERDOGAN", "RECEP TAYYP ERDOGAN", "RECEP TAYYIP ERD0GAN", "RECEP TAYYP ERD0GAN", "RECEP TAYYIP ERD0GAN"],
+        "MUHARREM INCE": ["MUHARREM INCE", "MUHARREM 1NCE", "MUHAREM INCE", "MUHARREM INÇE"],
+        "KEMAL KILICDAROGLU": ["KEMAL KILICDAROGLU", "KEMAL KILICOAROGLU", "KEMAL K1LICDAROGLU", "KEMA_ KILICDAROGLU", "KEMAL KILICDAR0GLU", "KEMA_ K1LICDAR0GLU"],
+        "SINAN OGAN": ["SINAN OGAN", "SINAN 0GAN", "S1NAN OGAN", "SINAN OG_N", "S1NAN 0G_N", "SNAN 0GAN"]
+    }
 
     # Initialize an empty dictionary to store the vote counts
     vote_counts = {}
 
-    # Extract the numbers for each candidate
-    for candidate in candidates:
-        # Use regular expressions to find the numbers after the candidate's name
-        pattern = re.compile(f"{candidate}\s*,\s*(\d+)")
-        match = pattern.search(data)
+    # Extract the numbers for each candidate and their typos
+    for candidate, typos in candidates.items():
+        for typo in typos:
+            # Use regular expressions to find the numbers after the candidate's name or typo
+            pattern = re.compile(f"{typo}\s*,\s*(\d+)")
+            match = pattern.search(data)
 
-        if match:
-            # Extract the vote count
-            vote_count = int(match.group(1))
-            # Store the vote count in the dictionary
-            vote_counts[candidate] = vote_count
-    
-    # Calculate the sum of vote counts
-    sum_votes = sum(vote_counts.values())
-
-    # Extract the total vote count
-    pattern = re.compile("TOPLAM\s*,\s*(\d+)")
-    match = pattern.search(data)
-
-    if match:
-        total_votes = int(match.group(1))
-        # Store the total vote count in the dictionary
-        vote_counts["TOPLAM"] = total_votes
-
-    if sum_votes != total_votes:
-        print("##### Sum of vote counts does not match the total vote count.")
-
-    # Print the vote counts dictionary
-    print(vote_counts)
-
-def get_vote_count2(data):
-    # Define the candidate names to extract vote counts for
-    candidates = ["RECEP TAYYIP ERDOGAN", "MUHARREM INCE", "KEMAL KILICDAROGLU", "SINAN OGAN"]
-
-    # Initialize an empty dictionary to store the vote counts
-    vote_counts = {}
-
-    # Tokenize the data
-    data_tokens = data.split()
-
-    # Iterate over the tokens in the data
-    for token in data_tokens:
-        # Check if the token is a fuzzy match for any candidate
-        for candidate in candidates:
-            if fuzz.ratio(token.upper(), candidate) > 40:  # 80 is a threshold you can adjust
-                # If it is a match, find the vote count that follows the candidate's name
-                pattern = re.compile(f"{token}\s*,\s*(\d+)")
-                match = pattern.search(data)
-
-                if match:
-                    # Extract the vote count
-                    vote_count = int(match.group(1))
-                    # Store the vote count in the dictionary
+            if match:
+                # Extract the vote count
+                vote_count = int(match.group(1))
+                # If candidate already has a vote count, add this count to the existing value
+                if candidate in vote_counts:
+                    vote_counts[candidate] += vote_count
+                # Otherwise, store the vote count in the dictionary
+                else:
                     vote_counts[candidate] = vote_count
-                    break  # Break the inner loop once we found a match
-    
-    # Calculate the sum of vote counts
-    sum_votes = sum(vote_counts.values())
+                # Since a match is found, proceed to the next candidate/typo
+                break
 
     # Extract the total vote count
     pattern = re.compile("TOPLAM\s*,\s*(\d+)")
@@ -131,16 +100,35 @@ def get_vote_count2(data):
         # Store the total vote count in the dictionary
         vote_counts["TOPLAM"] = total_votes
 
-    if sum_votes != total_votes:
-        print("##### Sum of vote counts does not match the total vote count.")
+    return vote_counts
 
-    # Print the vote counts dictionary
-    print(vote_counts)
-    
+
+def textract_to_csv(response):
+    blocks = response['Blocks']
+    blocks_map = {}
+    table_blocks = []
+    for block in blocks:
+        blocks_map[block['Id']] = block
+        if block['BlockType'] == "TABLE":
+            table_blocks.append(block)
+
+    if len(table_blocks) <= 0:
+        print("<b> NO Table FOUND </b>")
+
+    csv = ''
+    for index, table in enumerate(table_blocks):
+        csv += generate_table_csv(table, blocks_map, index + 1)
+
+    csv = re.sub(r'[^A-Za-z0-9, ]', '', csv)
+
+    return csv
+
+
 def main():
     # Create directories for images and Textract data
     os.makedirs('images', exist_ok=True)
     os.makedirs('textract', exist_ok=True)
+    os.makedirs('not_same', exist_ok=True)
 
     # Create a session for AWS Textract and S3
     session = boto3.Session(
@@ -174,19 +162,19 @@ def main():
                 continue
             else:
                 # Check if image already exists in local folder before uploading
-                local_image_path = os.path.join('.', f'images/{ballot_box_id}/cm.jpg')
-                if os.path.exists(local_image_path):
-                    print(f'Image already exists in local folder for ballot box {ballot_box_id}')
-                else:
+                local_image_path = os.path.join(
+                    '.', f'images/{ballot_box_id}/cm.jpg')
+                if not os.path.exists(local_image_path):
                     # Image doesn't exist in local folder, proceed with download and save
                     response = requests.get(image_url)
                     if response.status_code == 200:
-                        os.makedirs(os.path.dirname(local_image_path), exist_ok=True)
+                        os.makedirs(os.path.dirname(
+                            local_image_path), exist_ok=True)
                         with open(local_image_path, 'wb') as image_file:
                             image_file.write(response.content)
-                        print(f'Saved image for ballot box {ballot_box_id} in local folder')
+                        # print(f'Saved image for ballot box {ballot_box_id} in local folder')
                     else:
-                        print(f'Error downloading image for ballot box {ballot_box_id}')
+                        # print(f'Error downloading image for ballot box {ballot_box_id}')
                         continue
 
             # Check if AWS Textract data already exists before sending to AWS
@@ -212,33 +200,35 @@ def main():
                 os.makedirs(os.path.dirname(textract_data_path), exist_ok=True)
                 with open(textract_data_path, 'w') as textract_file:
                     json.dump(response, textract_file)
-                
-            blocks=response['Blocks']
-            blocks_map = {}
-            table_blocks = []
-            for block in blocks:
-                blocks_map[block['Id']] = block
-                if block['BlockType'] == "TABLE":
-                    table_blocks.append(block)
 
-            if len(table_blocks) <= 0:
-                print("<b> NO Table FOUND </b>")
-
-            csv = ''
-            for index, table in enumerate(table_blocks):
-                csv += generate_table_csv(table, blocks_map, index +1)
-
-            csv = re.sub(r'[^A-Za-z0-9, ]', '', csv)
+            csv = textract_to_csv(response)
 
             textract_table_path = f'textract/{ballot_box_id}/textract_table_cm.csv'
             with open(textract_table_path, 'w') as textract_table_file:
                 textract_table_file.write(csv)
 
-            get_vote_count(csv)
+            textract_results = get_vote_count_from_textract(csv)
+
+            total_votes = sum(
+                [value for key, value in textract_results.items() if key != "TOPLAM"])
+
+            if total_votes == textract_results["TOPLAM"]:
+                print("All candidates' vote count and the total are the same.")
+            else:
+                print("#################All candidates' vote count and the total are not the same.")
+                # Move the Textract data and image to not_same folder
+                not_same_textract_path = f'not_same/{ballot_box_id}/textract_data_cm.json'
+                not_same_image_path = f'not_same/{ballot_box_id}/cm.jpg'
+                os.makedirs(os.path.dirname(not_same_textract_path), exist_ok=True)
+                os.makedirs(os.path.dirname(not_same_image_path), exist_ok=True)
+
+                os.rename(textract_data_path, not_same_textract_path)
+                os.rename(local_image_path, not_same_image_path)
 
             # print(f'Saved AWS Textract data for ballot box {ballot_box_id}')
 
             print('\n\n\n')
+
 
 if __name__ == "__main__":
     main()
