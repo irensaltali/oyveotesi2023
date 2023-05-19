@@ -218,11 +218,14 @@ def main():
                 print("#################All candidates' vote count and the total are not the same.")
                 # Move the Textract data and image to not_same folder
                 not_same_textract_path = f'not_same/{ballot_box_id}/textract_data_cm.json'
+                not_same_textract_table_path = f'not_same/{ballot_box_id}/textract_data_table_cm.csv'
                 not_same_image_path = f'not_same/{ballot_box_id}/cm.jpg'
                 os.makedirs(os.path.dirname(not_same_textract_path), exist_ok=True)
+                os.makedirs(os.path.dirname(not_same_textract_table_path), exist_ok=True)
                 os.makedirs(os.path.dirname(not_same_image_path), exist_ok=True)
 
                 os.rename(textract_data_path, not_same_textract_path)
+                os.rename(textract_table_path, not_same_textract_table_path)
                 os.rename(local_image_path, not_same_image_path)
 
             # print(f'Saved AWS Textract data for ballot box {ballot_box_id}')
