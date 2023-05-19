@@ -5,7 +5,7 @@ import time
 from glob import glob
 
 # Create the directories to store the ballot box JSON files
-os.makedirs('ballot_box', exist_ok=True)
+os.makedirs('ballot_boxes_in_school', exist_ok=True)
 
 # Retrieve the list of school data files recursively
 school_files = glob('schools/*/*/*.json')
@@ -20,10 +20,10 @@ for school_file in school_files:
         # Iterate over each school in the list
         for school_item in school_data:
             school_id = school_item['id']
-            ballot_box_filename = f'./ballot_box/{school_id}.json'
+            ballot_boxes_in_school_filename = f'./ballot_boxes_in_school/{school_id}.json'
 
             # Check if the ballot box JSON file already exists
-            if os.path.exists(ballot_box_filename):
+            if os.path.exists(ballot_boxes_in_school_filename):
                 print(
                     f'Ballot box file already exists for school ID {school_id}')
                 continue
@@ -42,13 +42,13 @@ for school_file in school_files:
 
             # Save the response as JSON
             if response.status_code == 200:
-                ballot_box_data = response.json()
+                ballot_boxes_in_school_data = response.json()
 
-                with open(ballot_box_filename, 'w') as outfile:
-                    json.dump(ballot_box_data, outfile)
+                with open(ballot_boxes_in_school_filename, 'w') as outfile:
+                    json.dump(ballot_boxes_in_school_data, outfile)
 
                 print(
-                    f'Saved ballot box data for school ID {school_id} to {ballot_box_filename}')
+                    f'Saved ballot box data for school ID {school_id} to {ballot_boxes_in_school_filename}')
             else:
                 print(
                     f'Error retrieving ballot box data for school ID {school_id}: {response.status_code}')

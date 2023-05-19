@@ -170,21 +170,21 @@ def main():
     textract_client = session.client('textract')
 
     # Iterate over each ballot box data file
-    for filename in os.listdir('ballot_box'):
+    for filename in os.listdir('ballot_boxes_in_school'):
         print(f'Processing {filename}...')
-        ballot_box_id = os.path.splitext(filename)[0]
-        file_path = f'ballot_box/{filename}'
+        ballot_boxes_in_school_id = os.path.splitext(filename)[0]
+        file_path = f'ballot_boxes_in_school/{filename}'
 
         with open(file_path) as file:
-            ballot_box_data = json.load(file)
+            ballot_boxes_in_school_data = json.load(file)
 
-        for ballot_box_item in ballot_box_data:
-            cm_result = ballot_box_item.get('cm_result')
+        for ballot_boxes_in_school_item in ballot_boxes_in_school_data:
+            cm_result = ballot_boxes_in_school_item.get('cm_result')
 
             # Skip if cm_result is None
             if cm_result is None:
                 print(
-                    f'Skipping ballot box {ballot_box_id}: cm_result is None')
+                    f'Skipping ballot box {ballot_boxes_in_school_id}: cm_result is None')
                 continue
 
             image_url = cm_result.get('image_url', '')
@@ -192,14 +192,14 @@ def main():
             # Skip if image_url is empty
             if not image_url:
                 print(
-                    f'Skipping ballot box {ballot_box_id}: image_url is empty')
+                    f'Skipping ballot box {ballot_boxes_in_school_id}: image_url is empty')
                 continue
             else:
                 # Check if image already exists in local folder before uploading
                 local_image_path = os.path.join(
-                    '.', f'images/{ballot_box_id}/cm.jpg')
+                    '.', f'images/{ballot_boxes_in_school_id}/cm.jpg')
                 preprocessed_image_path = os.path.join(
-                    '.', f'images/{ballot_box_id}/cm_preprocessed.jpg')
+                    '.', f'images/{ballot_boxes_in_school_id}/cm_preprocessed.jpg')
                 if not os.path.exists(local_image_path) or not os.path.exists(preprocessed_image_path):
                     # Image doesn't exist in local folder, proceed with download and save
                     response = requests.get(image_url)
@@ -207,7 +207,7 @@ def main():
                         os.makedirs(os.path.dirname(local_image_path), exist_ok=True)
                         with open(local_image_path, 'wb') as image_file:
                             image_file.write(response.content)
-                        # print(f'Saved image for ballot box {ballot_box_id} in local folder')
+                        # print(f'Saved image for ballot box {ballot_boxes_in_school_id} in local folder')
                         # Read the downloaded image
                         image = cv2.imread(local_image_path)
                         # Preprocess the image
@@ -215,11 +215,11 @@ def main():
                         os.makedirs(os.path.dirname(preprocessed_image_path), exist_ok=True)
                         cv2.imwrite(preprocessed_image_path, preprocessed_image)
                     else:
-                        # print(f'Error downloading image for ballot box {ballot_box_id}')
+                        # print(f'Error downloading image for ballot box {ballot_boxes_in_school_id}')
                         continue
 
             # Check if AWS Textract data already exists before sending to AWS
-            textract_data_path = f'textract/{ballot_box_id}/textract_data_cm.json'
+            textract_data_path = f'textract/{ballot_boxes_in_school_id}/textract_data_cm.json'
 
             # Check if Textract data exists locally
             if os.path.exists(textract_data_path):
@@ -244,7 +244,7 @@ def main():
 
             csv = textract_to_csv(response)
 
-            textract_table_path = f'textract/{ballot_box_id}/textract_table_cm.csv'
+            textract_table_path = f'textract/{ballot_boxes_in_school_id}/textract_table_cm.csv'
             with open(textract_table_path, 'w') as textract_table_file:
                 textract_table_file.write(csv)
 
@@ -259,9 +259,9 @@ def main():
                 print(
                     "#################All candidates' vote count and the total are not the same.")
                 # Move the Textract data and image to not_same folder
-                not_same_textract_path = f'not_same/{ballot_box_id}/textract_data_cm.json'
-                not_same_textract_table_path = f'not_same/{ballot_box_id}/textract_data_table_cm.csv'
-                not_same_image_path = f'not_same/{ballot_box_id}/cm.jpg'
+                not_same_textract_path = f'not_same/{ballot_boxes_in_school_id}/textract_data_cm.json'
+                not_same_textract_table_path = f'not_same/{ballot_boxes_in_school_id}/textract_data_table_cm.csv'
+                not_same_image_path = f'not_same/{ballot_boxes_in_school_id}/cm.jpg'
                 os.makedirs(os.path.dirname(
                     not_same_textract_path), exist_ok=True)
                 os.makedirs(os.path.dirname(
@@ -273,7 +273,7 @@ def main():
                 os.rename(textract_table_path, not_same_textract_table_path)
                 os.rename(local_image_path, not_same_image_path)
 
-            # print(f'Saved AWS Textract data for ballot box {ballot_box_id}')
+            # print(f'Saved AWS Textract data for ballot box {ballot_boxes_in_school_id}')
 
             print('\n\n\n')
 
