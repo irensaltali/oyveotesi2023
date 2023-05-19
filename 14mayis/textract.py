@@ -6,12 +6,8 @@ import time
 import re
 
 # Configure AWS credentials and region for Textract
-AWS_ACCESS_KEY_ID = 'XX'
-AWS_SECRET_ACCESS_KEY = 'XX'
 AWS_REGION = 'eu-central-1'
 S3_BUCKET = 'xx'
-
-
 
 def get_rows_columns_map(table_result, blocks_map):
     rows = {}
@@ -29,7 +25,6 @@ def get_rows_columns_map(table_result, blocks_map):
                     # get the text value
                     rows[row_index][col_index] = get_text(cell, blocks_map)
     return rows
-
 
 def get_text(result, blocks_map):
     text = ''
@@ -150,12 +145,10 @@ def main():
 
     # Create a session for AWS Textract and S3
     session = boto3.Session(
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        profile_name='irensaltali',
         region_name=AWS_REGION
     )
     textract_client = session.client('textract')
-    s3_client = session.client('s3')
 
     # Iterate over each ballot box data file
     for filename in os.listdir('ballot_box'):
@@ -180,44 +173,33 @@ def main():
             if not image_url:
                 print(f'Skipping ballot box {ballot_box_id}: image_url is empty')
                 continue
-
-            # Check if image already exists in S3 before uploading
-            s3_image_key = f'images/{ballot_box_id}/cm.jpg'
-            try:
-                s3_client.head_object(Bucket=S3_BUCKET, Key=s3_image_key)
-                # print(f'Image already exists in S3 for ballot box {ballot_box_id}')
-            except Exception as e:
-                if '404' in str(e):
-                    # Image doesn't exist in S3, proceed with upload
-                    # Download the image
+            else:
+                # Check if image already exists in local folder before uploading
+                local_image_path = os.path.join('.', f'images/{ballot_box_id}/cm.jpg')
+                if os.path.exists(local_image_path):
+                    print(f'Image already exists in local folder for ballot box {ballot_box_id}')
+                    pass
+                else:
+                    # Image doesn't exist in local folder, proceed with download and save
                     response = requests.get(image_url)
                     if response.status_code == 200:
-                        os.makedirs(os.path.dirname(s3_image_key), exist_ok=True)
-                        with open(s3_image_key, 'wb') as image_file:
+                        os.makedirs(os.path.dirname(local_image_path), exist_ok=True)
+                        with open(local_image_path, 'wb') as image_file:
                             image_file.write(response.content)
-                        # Upload the image to S3 bucket
-                        s3_client.upload_file(
-                            s3_image_key, S3_BUCKET, s3_image_key)
-                        # print(f'Uploaded image for ballot box {ballot_box_id}')
+                        print(f'Saved image for ballot box {ballot_box_id} in local folder')
                     else:
-                        print(
-                            f'Error downloading image for ballot box {ballot_box_id}')
-                else:
-                    print(
-                        f'Error checking if image exists in S3 for ballot box {ballot_box_id}: {str(e)}')
+                        print(f'Error downloading image for ballot box {ballot_box_id}')
+                        continue
 
             # Check if AWS Textract data already exists before sending to AWS
             textract_data_path = f'textract/{ballot_box_id}/textract_data.json'
             if os.path.exists(textract_data_path) is False:
-                # Send S3 object to AWS Textract for OCR processing
-                s3_object = {'Bucket': S3_BUCKET, 'Name': s3_image_key}
-
-                # with open(s3_image_key, 'rb') as image_file:
-                #     image_bytes = image_file.read()
-
                 # Call AWS Textract to process the image
+                with open(local_image_path, 'rb') as image_file:
+                    image_data = image_file.read()
+
                 response = textract_client.analyze_document(
-                    Document={'S3Object': s3_object},
+                    Document={'Bytes': image_data},
                     FeatureTypes=[
                         'TABLES',
                     ])
