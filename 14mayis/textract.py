@@ -190,8 +190,14 @@ def main():
                         continue
 
             # Check if AWS Textract data already exists before sending to AWS
-            textract_data_path = f'textract/{ballot_box_id}/textract_data.json'
-            if os.path.exists(textract_data_path) is False:
+            textract_data_path = f'textract/{ballot_box_id}/textract_data_cm.json'
+
+            # Check if Textract data exists locally
+            if os.path.exists(textract_data_path):
+                # Load the Textract data from the local file
+                with open(textract_data_path, 'r') as textract_file:
+                    response = json.load(textract_file)
+            else:
                 # Call AWS Textract to process the image
                 with open(local_image_path, 'rb') as image_file:
                     image_data = image_file.read()
@@ -201,38 +207,38 @@ def main():
                     FeatureTypes=[
                         'TABLES',
                     ])
-                
+
                 # Save the Textract response as JSON
                 os.makedirs(os.path.dirname(textract_data_path), exist_ok=True)
                 with open(textract_data_path, 'w') as textract_file:
                     json.dump(response, textract_file)
                 
-                blocks=response['Blocks']
-                blocks_map = {}
-                table_blocks = []
-                for block in blocks:
-                    blocks_map[block['Id']] = block
-                    if block['BlockType'] == "TABLE":
-                        table_blocks.append(block)
+            blocks=response['Blocks']
+            blocks_map = {}
+            table_blocks = []
+            for block in blocks:
+                blocks_map[block['Id']] = block
+                if block['BlockType'] == "TABLE":
+                    table_blocks.append(block)
 
-                if len(table_blocks) <= 0:
-                    print("<b> NO Table FOUND </b>")
+            if len(table_blocks) <= 0:
+                print("<b> NO Table FOUND </b>")
 
-                csv = ''
-                for index, table in enumerate(table_blocks):
-                    csv += generate_table_csv(table, blocks_map, index +1)
+            csv = ''
+            for index, table in enumerate(table_blocks):
+                csv += generate_table_csv(table, blocks_map, index +1)
 
-                csv = re.sub(r'[^A-Za-z0-9, ]', '', csv)
+            csv = re.sub(r'[^A-Za-z0-9, ]', '', csv)
 
-                textract_table_path = f'textract/{ballot_box_id}/textract_table.csv'
-                with open(textract_table_path, 'w') as textract_table_file:
-                    textract_table_file.write(csv)
+            textract_table_path = f'textract/{ballot_box_id}/textract_table_cm.csv'
+            with open(textract_table_path, 'w') as textract_table_file:
+                textract_table_file.write(csv)
 
-                get_vote_count(csv)
+            get_vote_count(csv)
 
-                # print(f'Saved AWS Textract data for ballot box {ballot_box_id}')
+            # print(f'Saved AWS Textract data for ballot box {ballot_box_id}')
 
-                print('\n\n\n')
+            print('\n\n\n')
 
 if __name__ == "__main__":
     main()
