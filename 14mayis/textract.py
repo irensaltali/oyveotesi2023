@@ -130,18 +130,6 @@ def preprocess_image(image, min_area_threshold=2000, concentration_threshold=0.8
     # Convert the image to grayscale
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Detecting visuals with OpenCV edge detector
-    canny_edge = cv2.Canny(gray_image, 30, 200)
-
-    # Find contours
-    contours, _ = cv2.findContours(canny_edge, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    padding = 2
-
-    for contour in contours:
-        x, y, w, h = cv2.boundingRect(contour)
-        if h * w > min_area_threshold:
-            cv2.rectangle(gray_image, (x-padding, y-padding), (x+w+padding, y+h+padding), (255, 255, 255), -1)
-
     # Pixel concentration analysis
     _, threshold_image = cv2.threshold(gray_image, 200, 255, cv2.THRESH_BINARY)
 
