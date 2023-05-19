@@ -4,6 +4,8 @@ import requests
 import boto3
 import time
 import re
+import cv2
+
 # Configure AWS credentials and region for Textract
 AWS_REGION = 'eu-central-1'
 S3_BUCKET = 'xx'
@@ -124,6 +126,48 @@ def textract_to_csv(response):
     return csv
 
 
+def preprocess_image(image, min_area_threshold=2000, concentration_threshold=0.8):
+    # Convert the image to grayscale
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Detecting visuals with OpenCV edge detector
+    canny_edge = cv2.Canny(gray_image, 30, 200)
+
+    # Find contours
+    contours, _ = cv2.findContours(canny_edge, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    padding = 2
+
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if h * w > min_area_threshold:
+            cv2.rectangle(gray_image, (x-padding, y-padding), (x+w+padding, y+h+padding), (255, 255, 255), -1)
+
+    # Pixel concentration analysis
+    _, threshold_image = cv2.threshold(gray_image, 200, 255, cv2.THRESH_BINARY)
+
+    # Collapse the pixels horizontally and calculate concentration
+    black_pixels_concentration = cv2.reduce(threshold_image, 1, cv2.REDUCE_SUM, dtype=cv2.CV_32F) / (255 * threshold_image.shape[1])
+
+    # Find non-text segments
+    non_text_segments = []
+    row, col = 0, 0
+    while col < black_pixels_concentration.shape[1]:
+        if black_pixels_concentration[row, col] < concentration_threshold:
+            x_min, y_min = col, row
+            while col < black_pixels_concentration.shape[1] and black_pixels_concentration[row, col] < concentration_threshold:
+                col += 1
+            x_max, y_max = col - 1, gray_image.shape[0] - 1
+            non_text_segments.append([x_min, y_min, x_max, y_max])
+        col += 1
+
+    # Remove non-text areas
+    for segment in non_text_segments:
+        x_min, y_min, x_max, y_max = segment
+        cv2.rectangle(gray_image, (x_min, y_min), (x_max, y_max), (255, 255, 255), -1)
+
+    return gray_image
+
+
 def main():
     # Create directories for images and Textract data
     os.makedirs('images', exist_ok=True)
@@ -151,28 +195,37 @@ def main():
 
             # Skip if cm_result is None
             if cm_result is None:
-                print(f'Skipping ballot box {ballot_box_id}: cm_result is None')
+                print(
+                    f'Skipping ballot box {ballot_box_id}: cm_result is None')
                 continue
 
             image_url = cm_result.get('image_url', '')
 
             # Skip if image_url is empty
             if not image_url:
-                print(f'Skipping ballot box {ballot_box_id}: image_url is empty')
+                print(
+                    f'Skipping ballot box {ballot_box_id}: image_url is empty')
                 continue
             else:
                 # Check if image already exists in local folder before uploading
                 local_image_path = os.path.join(
                     '.', f'images/{ballot_box_id}/cm.jpg')
-                if not os.path.exists(local_image_path):
+                preprocessed_image_path = os.path.join(
+                    '.', f'images/{ballot_box_id}/cm_preprocessed.jpg')
+                if not os.path.exists(local_image_path) or not os.path.exists(preprocessed_image_path):
                     # Image doesn't exist in local folder, proceed with download and save
                     response = requests.get(image_url)
                     if response.status_code == 200:
-                        os.makedirs(os.path.dirname(
-                            local_image_path), exist_ok=True)
+                        os.makedirs(os.path.dirname(local_image_path), exist_ok=True)
                         with open(local_image_path, 'wb') as image_file:
                             image_file.write(response.content)
                         # print(f'Saved image for ballot box {ballot_box_id} in local folder')
+                        # Read the downloaded image
+                        image = cv2.imread(local_image_path)
+                        # Preprocess the image
+                        preprocessed_image = preprocess_image(image)# Save the preprocessed image
+                        os.makedirs(os.path.dirname(preprocessed_image_path), exist_ok=True)
+                        cv2.imwrite(preprocessed_image_path, preprocessed_image)
                     else:
                         # print(f'Error downloading image for ballot box {ballot_box_id}')
                         continue
@@ -187,7 +240,7 @@ def main():
                     response = json.load(textract_file)
             else:
                 # Call AWS Textract to process the image
-                with open(local_image_path, 'rb') as image_file:
+                with open(preprocessed_image_path, 'rb') as image_file:
                     image_data = image_file.read()
 
                 response = textract_client.analyze_document(
@@ -215,14 +268,18 @@ def main():
             if total_votes == textract_results["TOPLAM"]:
                 print("All candidates' vote count and the total are the same.")
             else:
-                print("#################All candidates' vote count and the total are not the same.")
+                print(
+                    "#################All candidates' vote count and the total are not the same.")
                 # Move the Textract data and image to not_same folder
                 not_same_textract_path = f'not_same/{ballot_box_id}/textract_data_cm.json'
                 not_same_textract_table_path = f'not_same/{ballot_box_id}/textract_data_table_cm.csv'
                 not_same_image_path = f'not_same/{ballot_box_id}/cm.jpg'
-                os.makedirs(os.path.dirname(not_same_textract_path), exist_ok=True)
-                os.makedirs(os.path.dirname(not_same_textract_table_path), exist_ok=True)
-                os.makedirs(os.path.dirname(not_same_image_path), exist_ok=True)
+                os.makedirs(os.path.dirname(
+                    not_same_textract_path), exist_ok=True)
+                os.makedirs(os.path.dirname(
+                    not_same_textract_table_path), exist_ok=True)
+                os.makedirs(os.path.dirname(
+                    not_same_image_path), exist_ok=True)
 
                 os.rename(textract_data_path, not_same_textract_path)
                 os.rename(textract_table_path, not_same_textract_table_path)
