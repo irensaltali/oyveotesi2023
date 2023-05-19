@@ -4,7 +4,6 @@ import requests
 import boto3
 import time
 import re
-
 # Configure AWS credentials and region for Textract
 AWS_REGION = 'eu-central-1'
 S3_BUCKET = 'xx'
@@ -178,7 +177,6 @@ def main():
                 local_image_path = os.path.join('.', f'images/{ballot_box_id}/cm.jpg')
                 if os.path.exists(local_image_path):
                     print(f'Image already exists in local folder for ballot box {ballot_box_id}')
-                    pass
                 else:
                     # Image doesn't exist in local folder, proceed with download and save
                     response = requests.get(image_url)
@@ -204,6 +202,11 @@ def main():
                         'TABLES',
                     ])
                 
+                # Save the Textract response as JSON
+                os.makedirs(os.path.dirname(textract_data_path), exist_ok=True)
+                with open(textract_data_path, 'w') as textract_file:
+                    json.dump(response, textract_file)
+                
                 blocks=response['Blocks']
                 blocks_map = {}
                 table_blocks = []
@@ -221,12 +224,11 @@ def main():
 
                 csv = re.sub(r'[^A-Za-z0-9, ]', '', csv)
 
-                # Save the Textract response as JSON
-                os.makedirs(os.path.dirname(textract_data_path), exist_ok=True)
-                with open(textract_data_path, 'w') as textract_file:
-                    json.dump(csv, textract_file)
+                textract_table_path = f'textract/{ballot_box_id}/textract_table.csv'
+                with open(textract_table_path, 'w') as textract_table_file:
+                    textract_table_file.write(csv)
 
-                get_vote_count2(csv)
+                get_vote_count(csv)
 
                 # print(f'Saved AWS Textract data for ballot box {ballot_box_id}')
 
